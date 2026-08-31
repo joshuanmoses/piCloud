@@ -32,7 +32,7 @@ RUN npm run build
 # ---------------------------------------------------------------------------
 # Stage 2 — build the server
 # ---------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS backend
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS backend
 
 # Declared without defaults on purpose: BuildKit populates these from the
 # target platform. Giving them defaults would mask that detection and silently
