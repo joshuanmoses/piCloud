@@ -70,7 +70,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # ---------------------------------------------------------------------------
 # Stage 3 — runtime
 # ---------------------------------------------------------------------------
-FROM alpine:3.22 AS runtime
+FROM alpine:3.24 AS runtime
 
 # Alpine rather than scratch or distroless: on a headless Raspberry Pi, being
 # able to `docker compose exec app sh` to diagnose a mount or permission problem
