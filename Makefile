@@ -19,6 +19,15 @@ EMBED_DIR        := $(BACKEND_DIR)/internal/web/dist
 VERSION          ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "1.0.0-dev")
 COMMIT           ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE       ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+
+# Pin the three above to their value now, at parse time. Left recursive, each
+# would re-run its shell command every time it is referenced — and by then
+# build-frontend has overwritten the tracked SPA placeholder, so `git describe`
+# would report a working tree its own build had dirtied and stamp "-dirty" on
+# an otherwise clean release. `?=` above still lets the environment override.
+VERSION          := $(VERSION)
+COMMIT           := $(COMMIT)
+BUILD_DATE       := $(BUILD_DATE)
 VERSION_PKG      := github.com/joshuanmoses/piCloud/backend/internal/version
 LDFLAGS          := -s -w \
                     -X $(VERSION_PKG).Version=$(VERSION) \
