@@ -1,0 +1,39 @@
+# Pi-like resource constraints, for testing on a development machine.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d
+#
+# This does not make a fast machine slow — it caps memory and CPU share the way
+# a Raspberry Pi 4 does, which is enough to catch the failure that actually
+# matters: something that quietly allocates in proportion to file size and works
+# fine on a workstation with 64 GB.
+#
+# What it cannot simulate is the Pi's slower cores, its slower memory, and above
+# all its storage. Those need the real board; this catches the class of problem
+# that does not.
+
+services:
+  postgres:
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.5"
+    shm_size: 256mb
+
+  app:
+    deploy:
+      resources:
+        limits:
+          # The same limit docker-compose.prod.yml applies. The application
+          # streams through fixed 256 KB buffers, so its footprint is driven by
+          # concurrency rather than by file size — this is where that claim is
+          # either true or falsified.
+          memory: 768M
+          cpus: "2.0"
+
+  caddy:
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"

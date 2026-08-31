@@ -1,0 +1,22 @@
+# Normalise line endings so a Windows checkout cannot commit CRLF into shell
+# scripts — which would make them fail with "bad interpreter" inside the
+# containers, a confusing way to discover a text-encoding problem.
+* text=auto eol=lf
+
+*.sh        text eol=lf
+Makefile    text eol=lf
+Dockerfile  text eol=lf
+*.go        text eol=lf
+*.sql       text eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff  binary
+*.woff2 binary
+
+# Keep generated lockfiles and the vendored SPA placeholder out of diffs and
+# out of language statistics.
+frontend/package-lock.json      -diff linguist-generated
+backend/internal/web/dist/*     linguist-vendored
+docs/images/*                   binary

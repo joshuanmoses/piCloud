@@ -1,0 +1,24 @@
+# Keep the build context small: it is transferred to the daemon on every build,
+# which matters when building on a Raspberry Pi.
+.git
+.github
+**/node_modules
+**/dist
+**/coverage
+frontend/.vite
+
+# Never let a real environment file into an image layer.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+docs
+deploy/caddy/data
+deploy/caddy/config
+*.md
+!backend/**/*.md
+LICENSE
+Makefile
+docker-compose*.yml

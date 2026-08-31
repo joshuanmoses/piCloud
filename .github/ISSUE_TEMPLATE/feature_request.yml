@@ -1,0 +1,32 @@
+name: Feature request
+description: Suggest something PiFiles should be able to do
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        PiFiles targets a 4 GB Raspberry Pi and stays deliberately small.
+        [CONTRIBUTING.md](https://github.com/joshuanmoses/piCloud/blob/main/CONTRIBUTING.md) lists what has already
+        been decided against, and
+        [docs/BUILD_STATUS.md](https://github.com/joshuanmoses/piCloud/blob/main/docs/BUILD_STATUS.md) lists what is
+        deferred.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What can you not do today
+      description: The problem, rather than the solution you have in mind.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you tried or considered

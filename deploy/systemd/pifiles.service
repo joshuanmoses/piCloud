@@ -1,0 +1,51 @@
+# PiFiles — start the Docker Compose project at boot.
+#
+# Install:
+#   sudo cp deploy/systemd/pifiles.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now pifiles
+#
+# Edit WorkingDirectory below if PiFiles is not installed in /opt/pifiles.
+#
+# Note: Compose's own `restart: unless-stopped` policy already restarts
+# individual containers. This unit exists to bring the whole project up after a
+# reboot and to give the operator a familiar systemctl interface.
+
+[Unit]
+Description=PiFiles self-hosted file server
+Documentation=https://github.com/joshuanmoses/piCloud
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+# Do not start before the storage volume is mounted. Without this, the
+# application can start against an empty mount point and create its directory
+# layout on the boot media instead of the external drive.
+#
+# Change this to match STORAGE_ROOT — systemd names units after the mount path,
+# with "/" replaced by "-". For /srv/pifiles that is srv-pifiles.mount.
+RequiresMountsFor=/srv/pifiles
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/pifiles
+
+ExecStartPre=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.yml pull --ignore-pull-failures
+ExecStart=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --remove-orphans
+ExecStop=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.yml down
+
+# Pulling images and starting PostgreSQL on a Pi can take a while on the first
+# boot after an upgrade.
+TimeoutStartSec=900
+TimeoutStopSec=120
+
+Restart=on-failure
+RestartSec=30s
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pifiles
+
+[Install]
+WantedBy=multi-user.target

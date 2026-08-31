@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="PiFiles — a private, self-hosted file server." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>PiFiles</title>
+    <script>
+      // Apply the stored theme before first paint. Doing this in React would
+      // flash the wrong theme on every load.
+      (function () {
+        try {
+          var stored = localStorage.getItem('pifiles.theme')
+          var dark =
+            stored === 'dark' ||
+            ((!stored || stored === 'system') &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches)
+          document.documentElement.classList.toggle('dark', dark)
+        } catch (e) {
+          /* Private browsing can throw on localStorage; the default theme is fine. */
+        }
+      })()
+    </script>
+  </head>
+  <body class="h-full">
+    <div id="root" class="h-full"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,290 @@
+# PiFiles — base Compose definition.
+#
+# Usable as-is for local development and for a small production deployment.
+# For production, layer the overlay on top:
+#
+#     docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# or simply `make up-prod`, which does the same thing.
+#
+# Configuration comes from .env; copy .env.example and fill in the secrets, or
+# let the installer generate them.
+
+name: pifiles
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    # Unbounded container logs are a classic way to fill a Raspberry Pi's boot
+    # media. These limits apply to every service.
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — all metadata. File content lives on the filesystem, never here.
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    logging: *default-logging
+
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-pifiles}
+      POSTGRES_USER: ${DATABASE_USER:-pifiles}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD is required; copy .env.example to .env and set it}
+      # scram-sha-256 rather than the image default of trust for host
+      # connections. The database port is not published, but defence in depth
+      # costs nothing here.
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      PGDATA: /var/lib/postgresql/data/pgdata
+
+    # Tuned for a 4 GB Raspberry Pi running the whole stack.
+    # Rationale for every value: deploy/docker/postgres/tuning.md
+    command:
+      - postgres
+      - -c
+      - max_connections=50
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - effective_cache_size=768MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=64MB
+      # Storage is required to be SSD or NVMe; the 4.0 default models a
+      # spinning disk and causes needless sequential scans.
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - wal_compression=on
+      - -c
+      - max_wal_size=1GB
+      - -c
+      - min_wal_size=128MB
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - max_worker_processes=4
+      - -c
+      - max_parallel_workers=2
+      - -c
+      - max_parallel_workers_per_gather=1
+      - -c
+      - autovacuum_vacuum_scale_factor=0.05
+      - -c
+      - autovacuum_analyze_scale_factor=0.02
+      - -c
+      - jit=off
+      - -c
+      - timezone=UTC
+      - -c
+      - log_min_duration_statement=1000
+
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+    # Deliberately not published to the host. Only the application container
+    # needs to reach PostgreSQL, and exposing 5432 on a home network is a
+    # needless risk. `make db-shell` opens a shell inside the container.
+    expose:
+      - "5432"
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-pifiles} -d ${DATABASE_NAME:-pifiles} -q"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+    networks:
+      - internal
+
+  # ---------------------------------------------------------------------------
+  # Application — REST API, embedded web interface, background jobs.
+  # ---------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        VERSION: ${PIFILES_VERSION:-1.0.0-dev}
+        COMMIT: ${PIFILES_COMMIT:-unknown}
+        BUILD_DATE: ${PIFILES_BUILD_DATE:-unknown}
+    image: pifiles/app:${PIFILES_VERSION:-1.0.0-dev}
+    restart: unless-stopped
+
+    # The application never runs as root. Running it as the uid that owns the
+    # storage directory is what lets a bind mount work without a privileged
+    # chown inside the container. scripts/preflight.sh checks the two agree.
+    user: "${PIFILES_UID:-10001}:${PIFILES_GID:-10001}"
+
+    logging: *default-logging
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    environment:
+      APP_NAME: ${APP_NAME:-PiFiles}
+      APP_URL: ${APP_URL:-http://localhost:8080}
+      APP_ENV: ${APP_ENV:-production}
+      APP_SECRET_KEY: ${APP_SECRET_KEY:?APP_SECRET_KEY is required; copy .env.example to .env and set it}
+
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 8080
+
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: ${DATABASE_NAME:-pifiles}
+      DATABASE_USER: ${DATABASE_USER:-pifiles}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD is required}
+      DATABASE_SSLMODE: disable
+      DATABASE_MAX_CONNS: ${DATABASE_MAX_CONNS:-10}
+
+      # Inside the container the data root is always /data. The host directory
+      # it maps to is set by STORAGE_ROOT in .env.
+      STORAGE_ROOT: /data
+      STORAGE_MIN_FREE: ${STORAGE_MIN_FREE:-1GB}
+
+      MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-20GB}
+      UPLOAD_CHUNK_SIZE: ${UPLOAD_CHUNK_SIZE:-16MB}
+      DEFAULT_USER_QUOTA: ${DEFAULT_USER_QUOTA:-25GB}
+
+      SESSION_LIFETIME: ${SESSION_LIFETIME:-24h}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+      REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-false}
+
+      TRASH_RETENTION_DAYS: ${TRASH_RETENTION_DAYS:-30}
+      VERSIONING_ENABLED: ${VERSIONING_ENABLED:-true}
+
+      MALWARE_SCANNING_ENABLED: ${MALWARE_SCANNING_ENABLED:-false}
+      CLAMAV_ADDRESS: clamav:3310
+
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+
+      # Caddy's address on the internal bridge. Without this the application
+      # would not trust its forwarded headers, and every request would appear
+      # to originate from the proxy.
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-172.16.0.0/12,192.168.0.0/16,10.0.0.0/8,127.0.0.1/32}
+
+    volumes:
+      # User content. STORAGE_ROOT must be on external storage — an SSD, an
+      # NVMe drive, or a USB disk — never on the microSD card. See docs/storage.md.
+      #
+      # The ":z" suffix asks Docker to apply a shared SELinux label to the host
+      # directory. It is required on Fedora, RHEL, CentOS, and Rocky, where an
+      # unlabelled bind mount is denied with a bare "permission denied" that
+      # looks exactly like a wrong-ownership problem. On Raspberry Pi OS,
+      # Debian, and Ubuntu — which use AppArmor — it is silently ignored.
+      - ${STORAGE_ROOT:-/srv/pifiles}:/data:z
+
+    expose:
+      - "8080"
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8080/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    networks:
+      - internal
+
+  # ---------------------------------------------------------------------------
+  # Caddy — TLS termination, security headers, and byte-shovelling.
+  # ---------------------------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    logging: *default-logging
+
+    depends_on:
+      app:
+        condition: service_started
+
+    environment:
+      # The address Caddy binds. ":80" serves plain HTTP for a LAN install;
+      # a hostname such as "files.example.com" enables automatic HTTPS.
+      CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS:-:80}
+      CADDY_UPSTREAM: app:8080
+      CADDY_GLOBAL_OPTIONS: ${CADDY_GLOBAL_OPTIONS:-}
+
+    ports:
+      - "${HTTP_PUBLIC_PORT:-80}:80"
+      - "${HTTPS_PUBLIC_PORT:-443}:443"
+      # QUIC / HTTP3.
+      - "${HTTPS_PUBLIC_PORT:-443}:443/udp"
+
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro,z
+      # Issued certificates must persist, or every restart requests new ones
+      # and quickly hits Let's Encrypt rate limits.
+      - caddy-data:/data
+      - caddy-config:/config
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:80/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+    networks:
+      - internal
+
+  # ---------------------------------------------------------------------------
+  # ClamAV — optional. Off by default: it needs roughly 1 GB of RAM for its
+  # signature database, which is a large fraction of a 4 GB board.
+  #
+  # Enable with:  docker compose --profile malware up -d
+  # and set MALWARE_SCANNING_ENABLED=true in .env.
+  # ---------------------------------------------------------------------------
+  clamav:
+    image: clamav/clamav:1.4
+    profiles: ["malware"]
+    restart: unless-stopped
+    logging: *default-logging
+
+    environment:
+      CLAMAV_NO_MILTERD: "true"
+      # Signature updates are large; hourly is more than sufficient and is
+      # gentler on a home connection.
+      FRESHCLAM_CHECKS: "1"
+
+    volumes:
+      - clamav-data:/var/lib/clamav
+
+    expose:
+      - "3310"
+
+    healthcheck:
+      test: ["CMD-SHELL", "clamdcheck.sh || exit 1"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      # The first signature download takes several minutes on a Pi.
+      start_period: 300s
+
+    networks:
+      - internal
+
+volumes:
+  postgres-data:
+    driver: local
+  caddy-data:
+    driver: local
+  caddy-config:
+    driver: local
+  clamav-data:
+    driver: local
+
+networks:
+  internal:
+    driver: bridge

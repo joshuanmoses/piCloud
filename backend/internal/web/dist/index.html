@@ -1,0 +1,59 @@
+<!doctype html>
+<!--
+  This is the committed placeholder, not the application.
+
+  The real web interface is built by `make build-frontend`, which copies
+  frontend/dist over this directory. Only this file is tracked in git (see
+  .gitignore), so that `go build ./...` succeeds in a clean checkout without
+  requiring Node.
+
+  The string "frontend not built" below is the marker internal/web looks for to
+  decide whether a real build is embedded. If it is missing, the server assumes
+  the interface is real and starts without warning — so do not remove it, and
+  do not commit a built index.html over this file.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="robots" content="noindex" />
+    <title>PiFiles — frontend not built</title>
+    <style>
+      :root { color-scheme: light dark; --fg: #18181b; --muted: #52525b; --bg: #fafafa; --card: #fff; --line: #e4e4e7; --code: #f4f4f5; }
+      @media (prefers-color-scheme: dark) {
+        :root { --fg: #fafafa; --muted: #a1a1aa; --bg: #09090b; --card: #18181b; --line: #27272a; --code: #27272a; }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 1.5rem;
+        background: var(--bg); color: var(--fg);
+        font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      main { max-width: 34rem; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 2rem; }
+      h1 { margin: 0 0 .5rem; font-size: 1.25rem; }
+      p { margin: 0 0 1rem; color: var(--muted); }
+      pre { background: var(--code); border-radius: 8px; padding: .75rem 1rem; overflow-x: auto; margin: 0 0 1rem; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .875rem; }
+      footer { margin: 0; font-size: .8125rem; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>The web interface has not been built</h1>
+      <p>
+        The PiFiles server is running and its API is available, but the browser
+        interface is not embedded in this binary. This is the placeholder page
+        that ships in the source tree.
+      </p>
+      <p>Build it and restart:</p>
+      <pre><code>make build</code></pre>
+      <p>Or build the container image, which does this for you:</p>
+      <pre><code>make up</code></pre>
+      <footer>
+        If you installed PiFiles from a release image and see this page, the
+        image is incomplete — please report it.
+      </footer>
+    </main>
+  </body>
+</html>

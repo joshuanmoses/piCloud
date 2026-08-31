@@ -1,0 +1,143 @@
+@import 'tailwindcss';
+
+/*
+ * Design tokens.
+ *
+ * Colours are declared as OKLCH so that light and dark variants keep the same
+ * perceived contrast — important because the interface has to stay readable on
+ * a phone in daylight and on a desktop at night.
+ *
+ * Every colour used by the application is a token. Components never hardcode a
+ * palette value, which is what makes the dark theme a single override block
+ * rather than a per-component concern.
+ */
+@theme {
+  --color-background: oklch(1 0 0);
+  --color-foreground: oklch(0.21 0.02 264);
+
+  --color-surface: oklch(1 0 0);
+  --color-surface-foreground: oklch(0.21 0.02 264);
+  --color-surface-muted: oklch(0.97 0.003 264);
+
+  --color-muted: oklch(0.96 0.005 264);
+  --color-muted-foreground: oklch(0.52 0.015 264);
+
+  --color-border: oklch(0.92 0.006 264);
+  --color-input: oklch(0.92 0.006 264);
+  --color-ring: oklch(0.55 0.19 258);
+
+  --color-primary: oklch(0.55 0.19 258);
+  --color-primary-foreground: oklch(0.99 0.005 258);
+  --color-primary-muted: oklch(0.95 0.03 258);
+
+  --color-success: oklch(0.62 0.15 155);
+  --color-success-foreground: oklch(0.99 0.01 155);
+  --color-success-muted: oklch(0.95 0.04 155);
+
+  --color-warning: oklch(0.72 0.16 75);
+  --color-warning-foreground: oklch(0.25 0.05 75);
+  --color-warning-muted: oklch(0.96 0.05 85);
+
+  --color-danger: oklch(0.58 0.21 27);
+  --color-danger-foreground: oklch(0.99 0.01 27);
+  --color-danger-muted: oklch(0.96 0.03 27);
+
+  --radius-card: 0.75rem;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+  --font-mono:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+}
+
+/*
+ * Dark theme. Class-based rather than media-query-based so an explicit user
+ * choice can override the operating system preference.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+.dark {
+  --color-background: oklch(0.17 0.014 264);
+  --color-foreground: oklch(0.95 0.006 264);
+
+  --color-surface: oklch(0.21 0.016 264);
+  --color-surface-foreground: oklch(0.95 0.006 264);
+  --color-surface-muted: oklch(0.25 0.018 264);
+
+  --color-muted: oklch(0.26 0.016 264);
+  --color-muted-foreground: oklch(0.68 0.015 264);
+
+  --color-border: oklch(0.3 0.018 264);
+  --color-input: oklch(0.32 0.018 264);
+  --color-ring: oklch(0.62 0.17 258);
+
+  --color-primary: oklch(0.62 0.17 258);
+  --color-primary-foreground: oklch(0.16 0.02 258);
+  --color-primary-muted: oklch(0.28 0.06 258);
+
+  --color-success: oklch(0.68 0.14 155);
+  --color-success-foreground: oklch(0.16 0.03 155);
+  --color-success-muted: oklch(0.27 0.05 155);
+
+  --color-warning: oklch(0.78 0.15 80);
+  --color-warning-foreground: oklch(0.2 0.04 80);
+  --color-warning-muted: oklch(0.3 0.06 80);
+
+  --color-danger: oklch(0.66 0.19 27);
+  --color-danger-foreground: oklch(0.16 0.03 27);
+  --color-danger-muted: oklch(0.29 0.07 27);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* A visible, consistent focus ring is the backbone of keyboard navigation,
+     which the file browser depends on. */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+
+  /* Respect users who ask for reduced motion, and save a little CPU on a Pi
+     driving a large display. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* Visually hidden but available to screen readers. */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+}

@@ -1,0 +1,106 @@
+# PiFiles — production overlay.
+#
+#     docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# or `make up-prod`.
+#
+# Adds what a long-running deployment needs and development does not: resource
+# ceilings sized for a 4 GB Raspberry Pi, restart policies that survive a power
+# cut, dropped Linux capabilities, and read-only root filesystems.
+
+services:
+  postgres:
+    restart: always
+    # Never rebuild the database from a local Dockerfile in production.
+    pull_policy: missing
+
+    deploy:
+      resources:
+        limits:
+          # PostgreSQL is configured for shared_buffers=128MB plus per-connection
+          # work_mem. 1 GB leaves comfortable headroom without letting a runaway
+          # query consume the whole board.
+          memory: 1G
+        reservations:
+          memory: 256M
+
+    security_opt:
+      - no-new-privileges:true
+
+    # Shared memory for parallel query and large sorts. The Docker default of
+    # 64 MB is too small and shows up as "could not resize shared memory".
+    shm_size: 256mb
+
+    stop_grace_period: 60s
+
+  app:
+    restart: always
+
+    deploy:
+      resources:
+        limits:
+          # The application streams uploads and downloads through fixed 256 KB
+          # buffers, so its footprint is driven by concurrency, not file size.
+          # A 20 GB upload uses no more memory than a 20 KB one.
+          memory: 768M
+        reservations:
+          memory: 128M
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    read_only: true
+    tmpfs:
+      # The process needs somewhere to write scratch data; /data holds the
+      # real content and is a bind mount, not part of the root filesystem.
+      - /tmp:rw,noexec,nosuid,size=64m
+
+    # Allow in-flight uploads and downloads to finish before shutdown. The
+    # server stops accepting new connections immediately and drains the rest.
+    stop_grace_period: 45s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  caddy:
+    restart: always
+    pull_policy: missing
+
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 64M
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+    cap_add:
+      # Required to bind ports 80 and 443 as a non-root user.
+      - NET_BIND_SERVICE
+
+    stop_grace_period: 30s
+
+  clamav:
+    restart: always
+
+    deploy:
+      resources:
+        limits:
+          # The signature database alone is close to 1 GB in memory. On a 4 GB
+          # board, enabling ClamAV is a real trade-off — see .env.example.
+          memory: 1536M
+        reservations:
+          memory: 512M
+
+    security_opt:
+      - no-new-privileges:true

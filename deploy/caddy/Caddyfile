@@ -1,0 +1,121 @@
+# PiFiles — Caddy configuration.
+#
+# Caddy's job here is narrow and deliberate: terminate TLS, set edge security
+# headers, and move bytes. It does not serve static files (the application
+# embeds them), does not route by path, and does not buffer request bodies.
+#
+# The site address comes from CADDY_SITE_ADDRESS in .env:
+#
+#   :80                 plain HTTP for a LAN install
+#   pifiles.local       automatic HTTPS with a locally-trusted certificate
+#   files.example.com   automatic HTTPS from Let's Encrypt
+{
+	# Caddy's own admin API. Disabled: nothing in PiFiles uses it, and leaving
+	# it listening inside the container is a needless surface.
+	admin off
+
+	# Extra global options, supplied verbatim from CADDY_GLOBAL_OPTIONS in .env.
+	# It exists because Caddy has no conditional syntax: writing
+	# `email {$CADDY_TLS_EMAIL}` here would be a parse error whenever that
+	# variable is unset, which is the common case for a LAN install.
+	#
+	# To receive certificate-expiry notices from Let's Encrypt, set:
+	#     CADDY_GLOBAL_OPTIONS=email you@example.com
+	{$CADDY_GLOBAL_OPTIONS}
+
+	servers {
+		# Trust the Docker bridge network only. Caddy sets X-Forwarded-For for
+		# the application, and the application independently verifies that the
+		# peer is a trusted proxy before believing it.
+		trusted_proxies static private_ranges
+
+		# Do not buffer request or response bodies. A 20 GB upload must stream
+		# straight through to the application; buffering it would exhaust the
+		# container's memory and disk.
+		max_header_size 64KB
+	}
+}
+
+{$CADDY_SITE_ADDRESS} {
+	log {
+		output stdout
+		format json
+		# Health checks are polled constantly and drown out real traffic.
+		level INFO
+	}
+
+	# ---- Security headers ---------------------------------------------------
+	# The application sets an overlapping set itself, so it stays hardened when
+	# reached directly. These are the edge copy.
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+		Cross-Origin-Opener-Policy "same-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+
+		# Announcing the server version invites targeted probing.
+		-Server
+		-X-Powered-By
+	}
+
+	# HSTS is applied only when the connection is actually TLS. Sending it over
+	# plain HTTP is meaningless, and on a LAN install it would lock browsers out
+	# of an instance that has no certificate.
+	@https protocol https
+	header @https Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+	# ---- Compression --------------------------------------------------------
+	# Text compresses well and the saving is worth the CPU. Everything else is
+	# excluded: images, video, and archives are already compressed, and
+	# recompressing a large download is pure CPU cost on a Raspberry Pi.
+	encode {
+		zstd
+		gzip 5
+		match {
+			header Content-Type text/*
+			header Content-Type application/json*
+			header Content-Type application/javascript*
+			header Content-Type application/xml*
+			header Content-Type image/svg+xml*
+		}
+	}
+
+	# ---- Reverse proxy ------------------------------------------------------
+	reverse_proxy {$CADDY_UPSTREAM} {
+		# Streaming, in both directions. flush_interval -1 disables response
+		# buffering, which is what makes server-sent events and progressive
+		# downloads work.
+		flush_interval -1
+
+		# Caddy already forwards Host, X-Forwarded-For, and X-Forwarded-Proto
+		# by default. Only X-Real-IP needs stating explicitly.
+		header_up X-Real-IP {remote_host}
+
+		# No request-body limit is configured anywhere in this file. Caddy does
+		# not impose one by default; the application enforces MAX_UPLOAD_SIZE
+		# itself, where it can return a proper JSON error and account for the
+		# user's quota.
+
+		transport http {
+			# Large uploads legitimately take hours on a home connection. A
+			# read or write timeout here would abort them partway through.
+			dial_timeout 10s
+			response_header_timeout 60s
+		}
+	}
+
+	# When the application is unreachable — restarting, or still applying
+	# migrations — Caddy generates the error itself, so it must be handled here
+	# rather than with `handle_response`, which only sees responses that the
+	# upstream actually produced.
+	#
+	# This distinction matters: the application's own 503 from /health is
+	# meaningful and must reach the client unmodified. Only Caddy's gateway
+	# errors are rewritten.
+	handle_errors 502 503 504 {
+		header Content-Type "application/json; charset=utf-8"
+		header Cache-Control "no-store"
+		respond `{"error":{"code":"service_unavailable","message":"PiFiles is starting up or temporarily unavailable. Please try again in a moment."}}` 503
+	}
+}
